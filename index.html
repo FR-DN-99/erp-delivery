@@ -44,10 +44,14 @@
 
   .tarjeta{background:#fff; border-radius:var(--radio); box-shadow:var(--sombra); padding:14px; margin-bottom:12px}
   label{display:block; font-size:13px; color:var(--suave); margin:10px 0 4px; font-weight:600}
-  input,select,textarea{width:100%; padding:12px; border:1px solid var(--gris2); border-radius:10px;
+  input,select,textarea{width:100%; min-width:0; padding:12px; border:1px solid var(--gris2); border-radius:10px;
     font-size:16px; background:#fff; color:var(--texto); font-family:inherit;}
   input:focus,select:focus,textarea:focus{outline:none; border-color:var(--azul)}
-  .dos{display:flex; gap:10px} .dos>div{flex:1}
+  /* Inputs de fecha: evitar que se salgan del borde en iOS/Safari */
+  input[type="date"]{ -webkit-appearance:none; appearance:none; min-height:46px; }
+  input[type="date"]::-webkit-date-and-time-value{ text-align:left; margin:0; }
+  input[type="date"]::-webkit-calendar-picker-indicator{ margin-left:8px; flex-shrink:0; }
+  .dos{display:flex; gap:10px} .dos>div{flex:1; min-width:0}
   .btn{display:inline-flex; align-items:center; justify-content:center; gap:6px; background:var(--azul); color:#fff;
     border:none; border-radius:10px; padding:13px 16px; font-size:16px; font-weight:600; cursor:pointer; width:100%;}
   .btn:active{background:var(--azul-osc)}
@@ -145,6 +149,13 @@
   details.cli>summary .cli-sub{ color:var(--suave); font-size:13px; font-weight:400; }
   .cli-body{ padding-top:10px; }
   .cli-acc{ display:flex; gap:8px; margin-top:10px; }
+  /* Factura y productos puntuales */
+  .fac-badge{ display:inline-block; background:#6d4bd8; color:#fff; font-size:10px; font-weight:800; padding:2px 7px; border-radius:8px; letter-spacing:.4px; text-transform:uppercase; vertical-align:middle; }
+  .fac-mini{ display:inline-flex; align-items:center; justify-content:center; background:#6d4bd8; color:#fff; font-size:10px; font-weight:800; min-width:17px; height:16px; padding:0 4px; border-radius:5px; flex-shrink:0; }
+  .pun-tag{ display:inline-block; background:#eef1f4; color:var(--suave); font-size:10px; font-weight:700; padding:1px 6px; border-radius:6px; text-transform:uppercase; letter-spacing:.3px; vertical-align:middle; }
+  .pe-row{ display:flex; align-items:center; justify-content:space-between; gap:8px; background:var(--gris); border-radius:8px; padding:7px 10px; margin-bottom:6px; font-size:14px; }
+  .pe-row b{ font-weight:800; }
+  .pe-row .x{ cursor:pointer; color:var(--rojo); font-weight:800; padding:2px 8px; font-size:16px; }
 
   .aviso{background:var(--azul-cl); color:var(--azul-osc); border-radius:10px; padding:10px 12px; font-size:14px; margin-bottom:12px}
 
@@ -306,6 +317,30 @@
     #sec-semana .cli-lista{ grid-template-columns:1fr 1fr; column-gap:30px; }
   }
 
+  /* ---------- Transiciones y micro-interacciones ---------- */
+  body.modal-open{ position:fixed; left:0; right:0; width:100%; overflow:hidden; }
+  section.activa{ animation: secIn .24s ease both; }
+  @keyframes secIn{ from{opacity:0; transform:translateY(7px)} to{opacity:1; transform:none} }
+  details[open] > *:not(summary){ animation: revealIn .2s ease both; }
+  @keyframes revealIn{ from{opacity:0; transform:translateY(-4px)} to{opacity:1; transform:none} }
+  .modal-bg.abierto{ animation: mbgIn .16s ease; }
+  .modal-bg.abierto > .modal{ animation: mIn .24s cubic-bezier(.2,.85,.25,1); }
+  @keyframes mbgIn{ from{opacity:0} to{opacity:1} }
+  @keyframes mIn{ from{opacity:0; transform:translateY(16px) scale(.97)} to{opacity:1; transform:none} }
+  /* Pulsación fluida de botones y elementos táctiles */
+  .btn{ transition: transform .09s ease, filter .16s ease, background .16s ease, box-shadow .16s ease; }
+  .btn:active{ transform: scale(.972); }
+  nav button, .gear, .icobtn, .stepper button, .chip{ transition: transform .09s ease, background .16s ease, color .16s ease; }
+  nav button:active{ transform: scale(.9); }
+  .gear:active, .icobtn:active, .stepper button:active{ transform: scale(.88); }
+  .tab-ped{ transition: box-shadow .16s ease, transform .09s ease; }
+  .tab-ped:active{ transform: scale(.98); }
+  .item, .glob-item, .res-item, .cant-fila, details.diasem, details.cli, details.ded{ transition: background .16s ease, box-shadow .16s ease; }
+  summary{ transition: background .16s ease; }
+  details > summary::after{ transition: transform .18s ease; }
+  @media (prefers-reduced-motion: reduce){
+    *, *::before, *::after{ animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; scroll-behavior:auto !important; }
+  }
   #printArea{display:none}
   @media print{
     body{padding:0; background:#fff}
@@ -396,10 +431,27 @@
         <label>Día de entrega</label><input type="date" id="pedFecha">
         <label>Nota (opcional)</label>
         <input id="pedNota" placeholder="Ej. dejar en portería, o una hora si la hay">
+        <label style="display:flex;align-items:center;gap:9px;margin-top:12px;color:var(--texto);font-weight:600;cursor:pointer">
+          <input type="checkbox" id="pedFactura" style="width:auto;margin:0;transform:scale(1.2)"> Necesita factura
+        </label>
       </div>
       <div class="tarjeta">
         <label style="margin-top:0">Cantidades</label>
         <div id="pedCantidades"></div>
+        <details class="fmtgrp" style="margin-top:12px" id="pedPuntualDet">
+          <summary><span>Producto puntual (opcional)</span><span class="fmt-resumen" id="res_puntual"></span></summary>
+          <div style="padding-top:10px">
+            <div id="pedExtras"></div>
+            <input list="puntualesList" id="pePunNombre" placeholder="Nombre (ej. Pack Coca-Cola 6)" autocomplete="off" oninput="prefillPuntualPrecio()">
+            <datalist id="puntualesList"></datalist>
+            <div class="dos" style="margin-top:8px">
+              <div><input id="pePunCant" type="number" inputmode="numeric" min="1" placeholder="Cantidad"></div>
+              <div><input id="pePunPrecio" type="text" inputmode="decimal" placeholder="Precio/ud (opcional)"></div>
+            </div>
+            <button type="button" class="btn peq sec" style="width:100%;margin-top:8px" onclick="anadirPuntual()"><svg class="svgic sm" aria-hidden="true"><use href="#i-plus"></use></svg> Añadir a este pedido</button>
+            <p class="sub" style="margin:8px 0 0">Se compra en Central de Compras. No se guarda en el catálogo.</p>
+          </div>
+        </details>
       </div>
     </div>
     <div class="fila-btn ped-guardar"><button class="btn" onclick="guardarPedido()">Guardar pedido</button></div>
@@ -513,7 +565,7 @@ function asegurarDist(d){
   return { central:ensure('Central de Compras').id, firgas:ensure('Firgas').id };
 }
 function nueva(){
-  const d={formatos:[],marcas:[],productos:[],clientes:[],pedidos:[],distribuidores:[],ajustes:{}};
+  const d={formatos:[],marcas:[],productos:[],clientes:[],pedidos:[],distribuidores:[],puntuales:[],ajustes:{}};
   cargarCatalogoEn(d);
   return d;
 }
@@ -556,11 +608,13 @@ function migrarV2(d){
 function norm(d){
   d.formatos=d.formatos||[]; d.marcas=d.marcas||[]; d.productos=d.productos||[];
   d.clientes=d.clientes||[]; d.pedidos=d.pedidos||[]; d.ajustes=d.ajustes||{emailFabrica:''};
+  d.puntuales=d.puntuales||[];
   d.clientes.forEach(c=>{
     if(c.telefono===undefined)c.telefono='';
     if(c.calle===undefined){ c.calle=c.direccion||''; c.numero=''; c.piso=''; c.poblacion=''; c.cp=''; }
     if(c.tipovia===undefined) c.tipovia='';
     if(c.observaciones===undefined) c.observaciones='';
+    if(c.factura===undefined) c.factura=false;
   });
   const ids=asegurarDist(d);
   const marcaName=mid=>{ const m=d.marcas.find(x=>x.id===mid); return m?m.nombre:''; };
@@ -572,6 +626,8 @@ function norm(d){
     if(p.estado===undefined) p.estado = p.entregado ? 'entregado' : 'pendiente';
     if(p.intentos===undefined) p.intentos=[];
     if(p.pagado===undefined) p.pagado = (p.estado==='entregado'); // los ya entregados de antes se dan por cobrados
+    if(p.extras===undefined) p.extras=[];
+    if(p.factura===undefined) p.factura=false;
   });
   // asignar orden de entrega por día donde falte (respetando la hora antigua si existía)
   const porDia={};
@@ -628,7 +684,11 @@ function prodNombre(pid){ const p=prodObj(pid); if(!p) return '(eliminado)'; con
 function distNombre(did){ const d=(db.distribuidores||[]).find(x=>x.id===did); return d?d.nombre:'Sin distribuidora'; }
 function euro(n){ return (Math.round((+n||0)*100)/100).toFixed(2).replace('.',',')+' €'; }
 function precioProd(pid){ const p=prodObj(pid); return p&&typeof p.precio==='number'?p.precio:0; }
-function importePedido(p){ return Object.entries(p.items).reduce((s,[k,v])=>s+v*precioProd(k),0); }
+function importePedido(p){ return Object.entries(p.items).reduce((s,[k,v])=>s+v*precioProd(k),0) + (p.extras||[]).reduce((s,e)=>s+(e.cant||0)*(+e.precio||0),0); }
+function necesitaFactura(p){ if(p.clienteId){ const c=db.clientes.find(x=>x.id===p.clienteId); if(c) return !!c.factura; } return !!p.factura; }
+function centralDistId(){ const ds=db.distribuidores||[]; let c=ds.find(d=>/central/i.test(d.nombre)); if(c) return c.id; const f=ds.find(d=>/firgas/i.test(d.nombre)); c=ds.find(d=>!f||d.id!==f.id); return c?c.id:asegurarDist(db).central; }
+function extrasDe(fecha){ const m={}; db.pedidos.filter(p=>p.fecha===fecha).forEach(p=>{ (p.extras||[]).forEach(e=>{ const k=(e.nombre||'').trim().toLowerCase(); if(!k) return; (m[k]=m[k]||{nombre:(e.nombre||'').trim(),cant:0}).cant+=(e.cant||0); }); }); return Object.values(m).sort((a,b)=>a.nombre.localeCompare(b.nombre)); }
+function registrarPuntual(nombre, precio){ db.puntuales=db.puntuales||[]; const k=(nombre||'').trim().toLowerCase(); if(!k) return; let x=db.puntuales.find(z=>(z.nombre||'').trim().toLowerCase()===k); if(x){ if(precio!=null) x.precio=precio; } else db.puntuales.push({nombre:(nombre||'').trim(), precio: precio!=null?precio:null}); }
 function productosPorFormato(incluirBaja){
   const activo=p=> incluirBaja || p.activo!==false;
   const grupos=[];
@@ -858,6 +918,9 @@ function editarCliente(cid){
     </div>
     <label>Observaciones (opcional)</label>
     <textarea id="cliObs" rows="2" placeholder="Ej. nunca está en casa, dejar en la puerta o en la de al lado">${esc(c.observaciones||'')}</textarea>
+    <label style="display:flex;align-items:center;gap:9px;margin-top:12px;color:var(--texto);font-weight:600;cursor:pointer">
+      <input type="checkbox" id="cliFactura" ${c.factura?'checked':''} style="width:auto;margin:0;transform:scale(1.2)"> Necesita factura
+    </label>
     <details style="margin-top:12px">
       <summary style="cursor:pointer;font-weight:600;color:var(--azul-osc);padding:6px 0">Pedido habitual (opcional)</summary>
       <div style="margin-top:6px">${filasCantidades('cli_', c.tipico)}</div>
@@ -872,7 +935,8 @@ function guardarCliente(cid){
   const nombre=val('cliNombre');
   if(!nombre){ toast('Pon al menos el nombre.'); return; }
   const datos={nombre, telefono:val('cliTel'), tipovia:val('cliTipoVia'), calle:val('cliCalle'), numero:val('cliNumero'),
-    piso:val('cliPiso'), poblacion:val('cliPoblacion'), cp:val('cliCP'), observaciones:val('cliObs')};
+    piso:val('cliPiso'), poblacion:val('cliPoblacion'), cp:val('cliCP'), observaciones:val('cliObs'),
+    factura: !!document.getElementById('cliFactura').checked};
   datos.tipico={}; db.productos.forEach(p=>{ const v=leerStepper('cli_'+p.id); if(v>0) datos.tipico[p.id]=v; });
   if(cid){ const c=db.clientes.find(x=>x.id===cid); Object.assign(c,datos); }
   else{ db.clientes.push({id:id(), ...datos}); }
@@ -952,13 +1016,35 @@ function trasCambioStepper(key){
 function leerStepper(key){ const i=document.getElementById(key); return i?Math.max(0,parseInt(i.value)||0):0; }
 
 /* ---------- Añadir pedido ---------- */
-let pedSelId=null, pedPuntual=false, prefFecha=null, volverAgenda=false;
+let pedSelId=null, pedPuntual=false, prefFecha=null, volverAgenda=false, pedExtrasTmp=[];
 function prepararPedido(){
   pedSelId=null; pedPuntual=false; renderClienteZona();
   document.getElementById('pedNota').value='';
+  const fac=document.getElementById('pedFactura'); if(fac) fac.checked=false;
+  pedExtrasTmp=[]; pintarPedExtras(); llenarPuntualesList();
+  const det=document.getElementById('pedPuntualDet'); if(det) det.open=false;
   if(prefFecha){ document.getElementById('pedFecha').value=prefFecha; prefFecha=null; }
   else if(!document.getElementById('pedFecha').value) document.getElementById('pedFecha').value=hoyISO();
   pintarCantidadesPedido({});
+}
+function llenarPuntualesList(){ const dl=document.getElementById('puntualesList'); if(!dl) return; dl.innerHTML=(db.puntuales||[]).slice().sort((a,b)=>a.nombre.localeCompare(b.nombre)).map(x=>`<option value="${esc(x.nombre)}">${x.precio!=null?euro(x.precio):''}</option>`).join(''); }
+function prefillPuntualPrecio(){ const n=(document.getElementById('pePunNombre').value||'').trim().toLowerCase(); const pr=document.getElementById('pePunPrecio'); if(!pr||pr.value.trim()) return; const x=(db.puntuales||[]).find(z=>(z.nombre||'').trim().toLowerCase()===n); if(x&&x.precio!=null) pr.value=String(x.precio).replace('.',','); }
+function parsePrecioPun(s){ s=(s||'').trim().replace(',','.'); if(s==='') return null; const v=parseFloat(s); return isNaN(v)?null:v; }
+function anadirPuntual(){
+  const nombre=(document.getElementById('pePunNombre').value||'').trim();
+  const cant=parseInt(document.getElementById('pePunCant').value)||0;
+  const precio=parsePrecioPun(document.getElementById('pePunPrecio').value);
+  if(!nombre){ toast('Pon el nombre del producto puntual.'); return; }
+  if(cant<1){ toast('Pon la cantidad.'); return; }
+  pedExtrasTmp.push({nombre, cant, precio});
+  document.getElementById('pePunNombre').value=''; document.getElementById('pePunCant').value=''; document.getElementById('pePunPrecio').value='';
+  pintarPedExtras(); document.getElementById('pePunNombre').focus();
+}
+function quitarPuntual(i){ pedExtrasTmp.splice(i,1); pintarPedExtras(); }
+function pintarPedExtras(){
+  const cont=document.getElementById('pedExtras'); if(!cont) return;
+  cont.innerHTML=pedExtrasTmp.map((e,i)=>`<div class="pe-row"><span><b>${e.cant}</b> ${esc(e.nombre)}${e.precio!=null?` · ${euro(e.precio)}/ud`:''}</span><span class="x" onclick="quitarPuntual(${i})">×</span></div>`).join('');
+  const res=document.getElementById('res_puntual'); if(res) res.textContent = pedExtrasTmp.length? (pedExtrasTmp.reduce((s,e)=>s+e.cant,0)+' ud') : '';
 }
 function nuevoPedidoDia(iso){ prefFecha=iso; volverAgenda=true; ir('pedido'); }
 function renderClienteZona(){
@@ -994,7 +1080,7 @@ function filtrarClientes(){
   cont.innerHTML='<div class="resultados">'+lista.map(c=>`<div class="res-item" onclick="elegirCliente('${c.id}')">
       <span class="rn">${esc(c.nombre)}</span><span class="rt">${esc(c.telefono||composeDir(c)||'')}</span></div>`).join('')+'</div>';
 }
-function elegirCliente(cid){ pedSelId=cid; pedPuntual=false; const c=db.clientes.find(x=>x.id===cid); renderClienteZona(); pintarCantidadesPedido(c.tipico||{}); }
+function elegirCliente(cid){ pedSelId=cid; pedPuntual=false; const c=db.clientes.find(x=>x.id===cid); renderClienteZona(); pintarCantidadesPedido(c.tipico||{}); const fac=document.getElementById('pedFactura'); if(fac) fac.checked=!!c.factura; }
 function cambiarCliente(){ pedSelId=null; pedPuntual=false; renderClienteZona(); pintarCantidadesPedido({}); }
 function activarPuntual(){ pedPuntual=true; pedSelId=null; renderClienteZona(); pintarCantidadesPedido({}); }
 function pintarCantidadesPedido(vals){
@@ -1013,8 +1099,11 @@ function guardarPedido(){
   if(!fecha){ toast('Elige el día de entrega.'); return; }
   const items={}; let algo=false;
   db.productos.forEach(p=>{ const v=leerStepper('ped_'+p.id); if(v>0){ items[p.id]=v; algo=true; } });
-  if(!algo){ toast('Pon alguna cantidad.'); return; }
-  db.pedidos.push({id:id(), clienteId, nombre, direccion, telefono, fecha, orden:ordenSiguiente(fecha), items, estado:'pendiente', pagado:false, intentos:[], nota:document.getElementById('pedNota').value.trim()});
+  const extras = pedExtrasTmp.filter(e=>e.nombre && e.cant>0).map(e=>({nombre:e.nombre, cant:e.cant, precio:(e.precio!=null?e.precio:null)}));
+  if(!algo && extras.length===0){ toast('Pon alguna cantidad o un producto puntual.'); return; }
+  const factura = !!(document.getElementById('pedFactura')||{}).checked;
+  db.pedidos.push({id:id(), clienteId, nombre, direccion, telefono, fecha, orden:ordenSiguiente(fecha), items, extras, factura, estado:'pendiente', pagado:false, intentos:[], nota:document.getElementById('pedNota').value.trim()});
+  extras.forEach(e=>registrarPuntual(e.nombre, e.precio));
   guardar(); toast('Pedido guardado');
   if(volverAgenda){ volverAgenda=false; calSel=fecha; ir('agenda'); }
   else prepararPedido();
@@ -1032,6 +1121,7 @@ function tarjetaPedido(p, opts){
   const stCls = est==='entregado' ? (p.pagado?'st-ok':'st-debe') : (est==='fallido'?'st-fail':'st-pend');
   const dotCls = est==='entregado' ? (p.pagado?'ok':'debe') : (est==='fallido'?'fail':'pend');
   const items=Object.entries(p.items).map(([k,v])=>`<div class="pline"><span class="q">${v}</span><span>${esc(prodNombre(k))}</span></div>`).join('');
+  const extrasHtml=(p.extras||[]).map(e=>`<div class="pline"><span class="q">${e.cant}</span><span>${esc(e.nombre)} <span class="pun-tag">puntual</span></span></div>`).join('');
   const cli=p.clienteId?db.clientes.find(x=>x.id===p.clienteId):null;
   const obs=cli&&cli.observaciones?cli.observaciones:'';
   const imp=importePedido(p);
@@ -1059,14 +1149,14 @@ function tarjetaPedido(p, opts){
       <button class="btn peq gris" style="flex:1" onclick="borrarPedido('${p.id}')">Borrar</button></div>` : '';
   return `<details class="ped ${stCls}${opts.siguiente?' sig':''}" data-id="${p.id}"><summary>
       <span class="ord">${p.orden||'·'}</span>
-      <span class="idc">${opts.siguiente?'<span class="sig-badge">▶ Siguiente</span>':''}<div class="nom">${esc(p.nombre)}</div><div class="dir">${esc(p.direccion||'sin dirección')}</div></span>
+      <span class="idc">${opts.siguiente?'<span class="sig-badge">▶ Siguiente</span>':''}<div class="nom">${esc(p.nombre)} ${necesitaFactura(p)?'<span class="fac-badge">Factura</span>':''}</div><div class="dir">${esc(p.direccion||'sin dirección')}</div></span>
       <span class="edot ${dotCls}"></span>
       ${grip}
     </summary>
     <div class="ped-body">
       ${fechaLbl}
       ${contacto}
-      <div class="ped-prods">${items}</div>
+      <div class="ped-prods">${items}${extrasHtml}</div>
       ${imp>0?`<div style="margin-top:2px;font-weight:800;font-size:16px;color:${debe?'var(--naranja-osc)':'var(--texto)'}">${debe?'Debe':'Importe'}: ${euro(imp)}</div>`:''}
       ${obs?`<div class="obs">${ic('info','sm')}${esc(obs)}</div>`:''}
       ${p.nota?`<div class="dir" style="margin-top:6px">${ic('note','sm')} ${esc(p.nota)}</div>`:''}
@@ -1165,6 +1255,8 @@ function editarPedido(pid){
     <label>Cantidades</label>
     <div>${filasCantidades('edp_', p.items)}</div>
     <label>Nota</label><input id="edNota" value="${esc(p.nota||'')}" placeholder="Nota (opcional)">
+    ${puntual?`<label style="display:flex;align-items:center;gap:9px;margin-top:12px;font-weight:600;cursor:pointer;color:var(--texto)"><input type="checkbox" id="edFactura" ${p.factura?'checked':''} style="width:auto;margin:0;transform:scale(1.2)"> Necesita factura</label>`:''}
+    ${(p.extras&&p.extras.length)?`<label>Productos puntuales (se conservan)</label>${p.extras.map(e=>`<div class="pe-row"><span><b>${e.cant}</b> ${esc(e.nombre)}${e.precio!=null?` · ${euro(e.precio)}/ud`:''}</span></div>`).join('')}`:''}
     <div class="fila-btn">
       <button class="btn gris" onclick="cerrarModal()">Cancelar</button>
       <button class="btn" onclick="guardarEdicionPedido('${pid}')">Guardar cambios</button>
@@ -1175,10 +1267,11 @@ function guardarEdicionPedido(pid){
   const fecha=document.getElementById('edFecha').value; if(!fecha){ toast('Elige el día.'); return; }
   const items={}; let algo=false;
   db.productos.forEach(pr=>{ const v=leerStepper('edp_'+pr.id); if(v>0){ items[pr.id]=v; algo=true; } });
-  if(!algo){ toast('Pon alguna cantidad.'); return; }
+  if(!algo && !(p.extras&&p.extras.length)){ toast('Pon alguna cantidad o un producto puntual.'); return; }
   if(!p.clienteId){
     const nombre=(document.getElementById('edNombre').value||'').trim(); if(!nombre){ toast('Pon el nombre.'); return; }
     p.nombre=nombre; p.telefono=(document.getElementById('edTel').value||'').trim(); p.direccion=(document.getElementById('edDir').value||'').trim();
+    const fac=document.getElementById('edFactura'); if(fac) p.factura=!!fac.checked;
   }
   if(fecha!==p.fecha) p.orden=ordenSiguiente(fecha);
   p.fecha=fecha; p.items=items; p.nota=(document.getElementById('edNota').value||'').trim();
@@ -1379,7 +1472,7 @@ function pintarSemana(){
       const est=p.estado||'pendiente';
       const dot = est==='entregado'?(p.pagado?'ok':'debe'):(est==='fallido'?'fail':'pend');
       const loc = (p.direccion||'').split(' · ').pop();
-      return `<div class="rline"><span class="edot ${dot}" style="width:9px;height:9px"></span><b style="min-width:16px;text-align:right">${p.orden||''}</b><span class="rn">${esc(p.nombre)}</span>${loc?`<span class="sub" style="margin:0;white-space:nowrap">${esc(loc)}</span>`:''}</div>`;
+      return `<div class="rline"><span class="edot ${dot}" style="width:9px;height:9px"></span><b style="min-width:16px;text-align:right">${p.orden||''}</b><span class="rn">${esc(p.nombre)}</span>${necesitaFactura(p)?'<span class="fac-mini">F</span>':''}${loc?`<span class="sub" style="margin:0;white-space:nowrap">${esc(loc)}</span>`:''}</div>`;
     }).join('');
     const hoy = iso===hoyISO();
     cards+=`<details class="item diasem${hoy?' dia-hoy':''}"${desktop?' open':''}>
@@ -1453,7 +1546,7 @@ function tabPed(p){
   const loc=(p.direccion||'').split(' · ').pop();
   const imp=importePedido(p);
   return `<div class="tab-ped st-${dot}" data-id="${p.id}" onclick="abrirDiaTab('${p.fecha}')" title="Abrir en la agenda">
-    <div class="tab-l1"><span class="tab-ord">${p.orden||'·'}</span><span class="tab-nom">${esc(p.nombre)}</span><span class="edot ${dot}"></span></div>
+    <div class="tab-l1"><span class="tab-ord">${p.orden||'·'}</span><span class="tab-nom">${esc(p.nombre)}</span>${necesitaFactura(p)?'<span class="fac-mini">F</span>':''}<span class="edot ${dot}"></span></div>
     ${(loc||imp>0)?`<div class="tab-l2"><span>${esc(loc||'')}</span>${imp>0?`<span class="tab-imp">${euro(imp)}</span>`:''}</div>`:''}
   </div>`;
 }
@@ -1495,10 +1588,15 @@ function pintarHoja(){
   const tot=totalesDe(fecha);
   const ped=db.pedidos.filter(p=>p.fecha===fecha).sort(ordenar);
   const totalUn=Object.values(tot).reduce((s,v)=>s+v,0);
-  if(totalUn===0){ cont.innerHTML=`<div class="vacio">No hay pedidos para el ${fechaBonita(fecha)}.<br>Nada que cargar.</div>`; return; }
+  const exDia=extrasDe(fecha);
+  if(totalUn===0 && exDia.length===0){ cont.innerHTML=`<div class="vacio">No hay pedidos para el ${fechaBonita(fecha)}.<br>Nada que cargar.</div>`; return; }
+  const central=centralDistId();
   let cards='';
   db.distribuidores.forEach(dt=>{
-    const filas=filasHoja(tot, dt.id);
+    let filas=filasHoja(tot, dt.id);
+    if(dt.id===central && exDia.length){
+      filas += `<tr class="fmt-row"><td colspan="2">Puntuales</td></tr>` + exDia.map(e=>`<tr><td style="padding-left:18px">${esc(e.nombre)}</td><td class="cant">${e.cant}</td></tr>`).join('');
+    }
     if(!filas) return;
     cards+=`<div class="tarjeta">
       <div style="font-weight:700;font-size:16px">${ic('package','sm')}${esc(dt.nombre)}</div>
@@ -1513,7 +1611,7 @@ function pintarHoja(){
   const detalle=`<div class="tarjeta">
       <div style="font-weight:700;margin-bottom:6px">Detalle por cliente</div>
       ${ped.map(p=>{
-        const it=Object.entries(p.items).map(([k,v])=>`${v} ${prodNombre(k)}`).join(', ');
+        const it=[...Object.entries(p.items).map(([k,v])=>`${v} ${prodNombre(k)}`), ...(p.extras||[]).map(e=>`${e.cant} ${e.nombre} (puntual)`)].join(', ');
         const imp=importePedido(p);
         return `<div class="cant-fila"><span><b>#${p.orden||''} ${esc(p.nombre)}</b><br><span class="sub" style="margin:0">${esc(p.direccion||'')}</span></span><span style="text-align:right;font-size:14px;max-width:50%">${esc(it)}${imp>0?`<br><b>${euro(imp)}</b>`:''}</span></div>`;
       }).join('')}
@@ -1538,6 +1636,7 @@ function textoHoja(fecha, distId){
     t+='\n'+g.formato.nombre.toUpperCase()+':\n';
     prods.forEach(p=>{ t+='  - '+tot[p.id]+' x '+(marcaNombre(p.marcaId)||'Sin marca')+'\n'; });
   });
+  if(!distId || distId===centralDistId()){ const ex=extrasDe(fecha); if(ex.length){ t+='\nPUNTUALES:\n'; ex.forEach(e=>{ t+='  - '+e.cant+' x '+e.nombre+'\n'; }); } }
   return t;
 }
 function hojaImprimibleHTML(fecha, distId){
@@ -1549,6 +1648,7 @@ function hojaImprimibleHTML(fecha, distId){
     filas+=`<tr class="f"><td colspan="2">${esc(g.formato.nombre)}</td></tr>`;
     prods.forEach(p=>{ filas+=`<tr><td class="ind">${esc(marcaNombre(p.marcaId)||'Sin marca')}</td><td class="c">${tot[p.id]}</td></tr>`; });
   });
+  if(!distId || distId===centralDistId()){ const ex=extrasDe(fecha); if(ex.length){ filas+=`<tr class="f"><td colspan="2">Puntuales</td></tr>`+ex.map(e=>`<tr><td class="ind">${esc(e.nombre)}</td><td class="c">${e.cant}</td></tr>`).join(''); } }
   return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Hoja de carga ${esc(fechaBonita(fecha))}</title>
     <style>body{font-family:Arial,Helvetica,sans-serif;padding:24px;color:#13252f}h1{font-size:22px;margin:0 0 2px}
     p{color:#555;margin:0 0 16px}table{width:100%;border-collapse:collapse}td{padding:8px;border-bottom:1px solid #ccc}
@@ -1569,13 +1669,13 @@ function rutaImprimibleHTML(fecha){
   const ped=db.pedidos.filter(p=>p.fecha===fecha).sort(ordenar);
   const total=ped.reduce((s,p)=>s+importePedido(p),0);
   const filas=ped.map(p=>{
-    const it=Object.entries(p.items).map(([k,v])=>v+' '+prodNombre(k)).join(', ');
+    const it=[...Object.entries(p.items).map(([k,v])=>v+' '+prodNombre(k)), ...(p.extras||[]).map(e=>e.cant+' '+e.nombre)].join(', ');
     const imp=importePedido(p);
     const est=p.estado||'pendiente';
     const chk = est==='entregado'?(p.pagado?'Cobrado':'A deber'):(est==='fallido'?'No entregado':'☐');
     return `<tr>
       <td class="n">${p.orden||''}</td>
-      <td class="cli"><b>${esc(p.nombre)}</b>${p.telefono?`<br><span class="mut">${esc(p.telefono)}</span>`:''}</td>
+      <td class="cli"><b>${esc(p.nombre)}</b>${necesitaFactura(p)?' <span class="fac">FACTURA</span>':''}${p.telefono?`<br><span class="mut">${esc(p.telefono)}</span>`:''}</td>
       <td>${esc(p.direccion||'')}</td>
       <td class="prod">${esc(it)}</td>
       <td class="imp">${imp>0?euro(imp):''}</td>
@@ -1592,6 +1692,7 @@ function rutaImprimibleHTML(fecha){
     td.cli{white-space:nowrap}.mut{color:#777;font-weight:400;font-size:12px}
     td.prod{font-size:12px}td.imp{text-align:right;font-weight:700;white-space:nowrap}
     td.chk{text-align:center;white-space:nowrap;color:#555}
+    .fac{display:inline-block;background:#6d4bd8;color:#fff;font-size:10px;font-weight:800;padding:1px 5px;border-radius:4px;letter-spacing:.3px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
     tr{page-break-inside:avoid}tfoot td{border-top:2px solid #999;border-bottom:none;font-weight:800}</style></head>
     <body><h1>Hoja de ruta</h1><p>${esc(fechaBonita(fecha))} · ${ped.length} parada${ped.length!==1?'s':''}</p>
     <table><thead><tr><th>Nº</th><th>Cliente</th><th>Dirección</th><th>Pedido</th><th>Importe</th><th>Entrega</th></tr></thead>
@@ -1628,6 +1729,10 @@ function pdfHojaBlob(fecha, distId){
         doc.text(String(tot[p.id]),195,y,{align:'right'}); y+=6; });
       y+=2;
     });
+    if(!distId || distId===centralDistId()){ const ex=extrasDe(fecha); if(ex.length){ if(y>270){ doc.addPage(); y=20; }
+      doc.setTextColor(19,37,47); doc.setFont(undefined,'bold'); doc.setFontSize(12); doc.text('PUNTUALES',15,y); y+=6;
+      doc.setFont(undefined,'normal'); doc.setFontSize(11);
+      ex.forEach(e=>{ if(y>285){ doc.addPage(); y=20; } doc.text(String(e.nombre),20,y); doc.text(String(e.cant),195,y,{align:'right'}); y+=6; }); y+=2; } }
     return doc.output('blob');
   }catch(e){ return null; }
 }
@@ -1777,6 +1882,15 @@ function toast(msg){
     document.body.appendChild(t); }
   t.textContent=msg; t.style.opacity='1'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.opacity='0',1600);
 }
+
+/* Bloqueo de scroll del fondo cuando hay un modal abierto */
+let _scrollLocked=false, _scrollY=0;
+function _setScrollLock(on){
+  if(on && !_scrollLocked){ _scrollLocked=true; _scrollY=window.scrollY||window.pageYOffset||0; document.body.style.top=(-_scrollY)+'px'; document.body.classList.add('modal-open'); }
+  else if(!on && _scrollLocked){ _scrollLocked=false; document.body.classList.remove('modal-open'); document.body.style.top=''; window.scrollTo(0,_scrollY); }
+}
+function _syncScrollLock(){ const a=document.getElementById('modalBg'), b=document.getElementById('confirmBg'); const open=(a&&a.classList.contains('abierto'))||(b&&b.classList.contains('abierto')); _setScrollLock(open); }
+['modalBg','confirmBg'].forEach(idn=>{ const el=document.getElementById(idn); if(el&&window.MutationObserver){ new MutationObserver(_syncScrollLock).observe(el,{attributes:true,attributeFilter:['class']}); } });
 
 pintarCalendario();
 </script>
